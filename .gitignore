@@ -1,0 +1,6 @@
+**/__pycache__/*
+
+.idea/*
+
+ch_core_config.previous
+ch_control.db
