@@ -141,23 +141,35 @@ def create_dash(server):
                 html.Div(
                     dcc.Loading(
                         dcc.Graph(
-                            id="chart",
+                            id="temp_chart",
                             config={"displayModeBar": True}
                         ),
-                        id="graph_spinner",
+                        id="temp_spinner",
                         type="circle"
                     ),
                     className="card"
                 ),
+                html.Div(
+                    dcc.Loading(
+                        dcc.Graph(
+                            id="power_chart",
+                            config={"displayModeBar": True}
+                        ),
+                        id="pwr_spinner",
+                        type="circle"
+                    ),
+                    className="card"
+                )
             ],
             className="wrapper"
         ),
 
         html.Div(
             [
+                html.P(id="summary_results"),
                 html.Div([
-                    html.Div([html.Button("Compute", id="compute")], className="col-md-4"),
-                    html.Div(id="compute_errors", className="col-md-4")
+                    html.Div([html.Button("Compute", id="compute")], className="col-md-2"),
+                    html.Div(id="compute_errors", className="col-md-10")
                 ], className="row")
             ], className="container-fluid"
         ),
@@ -220,8 +232,10 @@ def create_dash(server):
 
     @app.callback(
         [
-            Output("compute_errors", "children"),
-            Output("chart", "figure")
+            Output("temp_chart", "figure"),
+            Output("power_chart", "figure"),
+            Output("summary_results", "children"),
+            Output("compute_errors", "children")
         ],
         Input("compute", "n_clicks"),
         [
@@ -236,7 +250,9 @@ def create_dash(server):
     )
     def compute(n_clicks, heat_loss_factor, emitter_std_power, fluid_volume, tmp, floor_area, cop_model, ambient_model, *target_temps):
         if ctx.triggered_id is None:  # no compute on initial load
-            return ["", no_update]
+            return [no_update, no_update, "", ""]
+
+        error_msg = ""
 
         building_params = {
             "heat_loss_factor": float(heat_loss_factor),
@@ -248,13 +264,127 @@ def create_dash(server):
 
         solver = RoomTempSolver(building_params, cop_model, ambient_model, target_temps_hourly=target_temps, initial_temp=16, steps_per_hour=6)
 
-        solver.iterate()  # TODO loop to convergence; 1 run for quick testing
+        MAX_ITERS = 10
+        while (solver.mean_t_iter_delta > 0.1) and (solver.n_iterations < MAX_ITERS):
+            solver.iterate()
+            print(solver.max_t_iter_delta, solver.mean_t_iter_delta)
 
-        figure = px.line(x=solver.times, y=solver.iter_room_temp, title="Room Temp/C")
+        if solver.n_iterations == MAX_ITERS:
+            error_msg = f"Failed to converge after {MAX_ITERS} solver iterations."
 
-        # check all values are valid and ranges are good (should be redundant as sliders are in use!
-        error_msgs = []
+        formatted_times = [f"{int(t):02d}:{int(t * 60 + 0.5) % 60:02d}" for t in solver.times]
 
-        return [[html.P(m) for m in error_msgs], figure]
+        tc_data_chunks = [
+            # temps
+            {
+                "x": formatted_times,
+                "y": solver.iter_room_temp,
+                "mode": "lines",
+                "hovertemplate": "Rm: %{y:.1f}C @ %{x}<extra></extra>",
+                "name": "Room"
+            },
+            {
+                "x": formatted_times,
+                "y": solver.ambient_temps,
+                "mode": "lines",
+                "hovertemplate": "Outside: %{y:.1f}C @ %{x}<extra></extra>",
+                "name": "Ambient"
+            },
+            # power in. Solver returns Watt.hours
+            {
+                "x": formatted_times,
+                "y": [wh / solver.time_step_duration / 1000 for wh in solver.iter_elec_used],
+                "mode": "lines",
+                "hovertemplate": "Power: %{y:.1f}kW @ %{x}<extra></extra>",
+                "name": "Power",
+                "yaxis": "y2",
+            }
+        ]
+
+        # add the target temps as a stepped coloured background.
+        y0 = min(int(min(solver.ambient_temps)), int(min(solver.iter_room_temp)))
+        shapes = list()
+        shape_template = {
+            "fillcolor": "red",
+            "line": {"width": 0},
+            "opacity": 0.2,
+            "type": "rect",
+            "x0": None,
+            "x1": None,
+            "y0": y0,
+            "y1": None
+            }
+        for hr, target_temp in enumerate(solver.target_temps):
+            if target_temp > y0:  # see above
+                # x0 = f"{hr:02d}:00"
+                # x1 = f"{hr+1:02d}:59"
+                x0, x1 = hr, hr+1
+                shape_template.update({"x0": x0, "x1": x1, "y1": target_temp})
+                shapes.append(shape_template.copy())
+
+        tc_layout_chunk = {
+            "title": {
+                "text": f"Temperatures & Energy In",
+                "x": 0.05,
+                "xanchor": "left",
+            },
+            "legend": {"x": -0.07, "xanchor": "left", "y": 1.0, "yanchor": "bottom", "orientation": "h"},
+            "xaxis": {"title": "Time", "fixedrange": False, "tickangle": 90},
+            "yaxis": {"title": "Temperature", "ticksuffix": "C", "fixedrange": False},
+            "yaxis2": {"title": "Power Input", "ticksuffix": "kW", "fixedrange": False, "overlaying": "y", "side": "right", "showgrid": False},
+            "shapes": shapes
+        }
+
+        pwr_data_chunks = [
+            # power in. Solver returns Watt.hours
+            {
+                "x": formatted_times,
+                "y": [wh / solver.time_step_duration / 1000 for wh in solver.iter_elec_used],
+                "mode": "lines",
+                "hovertemplate": "In: %{y:.1f}kW @ %{x}<extra></extra>",
+                "name": "Power In"
+            },
+            {
+                "x": formatted_times,
+                "y": [None if cop is None else cop * wh / solver.time_step_duration / 1000 for wh, cop in zip(solver.iter_elec_used, solver.cops)],
+                "mode": "lines",
+                "hovertemplate": "Out: %{y:.1f}kW @ %{x}<extra></extra>",
+                "name": "Power Out"
+            },
+            # COP
+            {
+                "x": formatted_times,
+                "y": solver.cops,
+                "mode": "lines",
+                "hovertemplate": "COP: %{y:.2f} @ %{x}<extra></extra>",
+                "name": "COP",
+                "yaxis": "y2",
+            }
+        ]
+
+        pwr_layout_chunk = {
+            "title": {
+                "text": f"Power and COP",
+                "x": 0.05,
+                "xanchor": "left",
+            },
+            "legend": {"x": -0.07, "xanchor": "left", "y": 1.0, "yanchor": "bottom", "orientation": "h"},
+            "xaxis": {"title": "Time", "fixedrange": False, "tickangle": 90},
+            "yaxis": {"title": "Power", "ticksuffix": "kW", "fixedrange": False},
+            "yaxis2": {"title": "COP", "fixedrange": False, "overlaying": "y", "side": "right", "showgrid": False},
+        }
+
+        # summary
+        total_energy = sum(solver.iter_elec_used) / 1000  # kWh
+        clean_cops = [c for c in solver.cops if c is not None]
+        mean_cop = sum(clean_cops) / len(clean_cops)
+        summary = f"Total Energy: {total_energy:.2f}kWh, Mean COP: {mean_cop:.2f}"
+
+        return [
+            {"data": tc_data_chunks, "layout": tc_layout_chunk},
+            {"data": pwr_data_chunks, "layout": pwr_layout_chunk},
+            summary,
+            html.B(error_msg, style={"background": "yellow"})
+        ]
 
     return app.server

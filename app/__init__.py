@@ -1,20 +1,10 @@
 """Base Flask app"""
 import importlib
-import json
 import logging
 import os
-# from logging.handlers import RotatingFileHandler
-# from logging import StreamHandler
-# import sys
-from os import path, remove
-from time import mktime, sleep, strftime, localtime
-from datetime import datetime as dt
-
-import requests
 from flask import Flask, request
 
 from app.views import base_app
-from app.api import add_api
 from config import Config
 
 
@@ -45,9 +35,6 @@ def create_app(test_config=None):
     for file in files:
         module = importlib.import_module("app.dash_apps." + file[:-3])
         app = module.create_dash(app)
-
-    # add API to routes
-    add_api(app)
 
     # log exceptions
     @app.errorhandler(Exception)

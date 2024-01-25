@@ -27,8 +27,10 @@ class RoomTempSolver:
         self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
 
         # other setup
+        self.steps_per_hour = steps_per_hour
         self.time_step_duration = 1 / steps_per_hour
-        self.hysteresis = 0.5  # temp must drop this far below threshold to turn off (no margin for turn-on)
+        self.hysteresis = 0.5  # interval between on and off temps for a given target
+        self.cop_model = COP(cop_defn["T_amb"], cop_defn["COP"])
 
         # current state
         self.heating_on = False
@@ -40,12 +42,11 @@ class RoomTempSolver:
         self.iter_elec_used = [0] * iter_steps
 
         # Convenient to get a list of ambient temperatures etc to match the iter_* data. Used internally and useful for plotting
-        cop_model = COP(cop_defn["T_amb"], cop_defn["COP"])
         amb_model = AmbientTemps(amb_defn)
         target_temp_lookup = TargetTemp(target_temps_hourly)
         self.times = list(np.arange(0, 24, 1 / steps_per_hour))
         self.ambient_temps = [amb_model.temp(hr) for hr in self.times]
-        self.cops = [cop_model.cop(t) for t in self.ambient_temps]
+        self.cops = list()  # this gets updated each iteration so that NAs are applied when the heating is not on. THIS IS RELIED ON in Dash app
         self.target_temps = [target_temp_lookup.temp(hr) for hr in self.times]
 
         # use to test for convergence. These are ABSOLUTE changes, i.e. |delta|
@@ -60,25 +61,28 @@ class RoomTempSolver:
         max_t_iter_delta = 0
         sum_t_iter_delta = 0
         self.n_iterations += 1
+        self.cops = list()
 
         for ix, hr in enumerate(self.times):
             amb = self.ambient_temps[ix]
-            cop = self.cops[ix]
+            cop = self.cop_model.cop(amb)
             target = self.target_temps[ix]
             t = self.current_temp
 
-            if t >= target:
+            if t >= target + self.hysteresis / 2:
                 self.heating_on = False
             else:
                 if not self.heating_on:
-                    self.heating_on = target - t > self.hysteresis
+                    self.heating_on = target - t > self.hysteresis / 2
 
             # heat loss and supplied by emitter
             lost = self.heat_loss_factor * (self.current_temp - amb) * self.time_step_duration
             if self.heating_on:
+                self.cops.append(cop)
                 emitted = self.emitter.output(t) * self.time_step_duration  # Watt.hours
                 elec_used = emitted / cop
             else:
+                self.cops.append(None)
                 emitted = 0
                 elec_used = 0
 

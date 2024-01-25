@@ -173,7 +173,14 @@ def get_ambient_hr_options():
             5.5,  # 18
             4.8  # 21
         ],
-        "Constant 10": [10.0] * 8
+        "Cold Snap": [
+
+        ],
+        "Constant 10": [10.0] * 8,
+        "Constant 7": [7.0] * 8,
+        "Constant 2": [2.0] * 8,
+        "Constant -2": [-2.0] * 8,
+        "Constant -7": [-7.0] * 8
     }
     return amb
 
@@ -185,7 +192,12 @@ def get_target_temp_options():
         #    00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
         "Moderate Burst":  # Our current CH controller default profile but with rounding off the 0.5 settings
             [14,  5,  5,  5,  5,  5,  5, 12, 13, 15, 16, 14, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 16, 15],
-        "Constant 14": [14] * 24
+        "Economical ASHP":  # A guess at a reasonable economical profile
+            [14, 12, 12, 12, 12, 12, 12, 13, 14, 15, 16, 14, 14, 14, 14, 15, 15, 16, 16, 16, 17, 17, 16, 15],
+        "Constant 14": [14] * 24,
+        "Constant 16": [16] * 24,
+        "Constant 18": [18] * 24,
+        "Constant 21": [21] * 24
     }
     return tt
 
