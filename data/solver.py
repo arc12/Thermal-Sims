@@ -100,7 +100,7 @@ class RoomTempSolver:
 
 
 class CyclingSolver:
-    def __init__(self, building_parameters, cop_option, max_lwt, hp_capacity, initial_temp, steps_per_minute=5):
+    def __init__(self, building_parameters, cop_option, max_lwt, hp_capacity, initial_temp, lwt_margin=5, steps_per_minute=5):
         """
         Computes HP on/off cycles and system fluid temp (actual LWT) against time and associated performance statistics for a variable HP capacity and max LWT,
         given building, fixed ambient outside temperatures, and heat pump properties.
@@ -129,7 +129,7 @@ class CyclingSolver:
         self.time_step_secs = 60 / steps_per_minute
         self.max_lwt = max_lwt
         self.hp_capacity = hp_capacity
-        self.lwt_margin = 5.0  # difference below max_lwt at which the HP will switch off.
+        self.lwt_margin = lwt_margin  # difference below max_lwt at which the HP will switch off.
 
         # current state
         self.cycle_start_room_temp = initial_temp
@@ -142,6 +142,7 @@ class CyclingSolver:
         self.cycle_elec_used = list()  # elec used during the step in W.h
         self.cycle_cop = list()  # COP based on the flow temp at the start of the step
         self.cycle_room_temp = list()
+        self.cycle_emitter_output = list()
         # aggregate for cycle
         self.on_duration = None
         self.off_duration = None
@@ -163,6 +164,7 @@ class CyclingSolver:
         self.cycle_elec_used = list()
         self.cycle_cop = list()
         self.cycle_room_temp = list()
+        self.cycle_emitter_output = list()
         # reset to None so they can be used to detect exceeding max steps
         self.on_duration = None  # minutes
         self.off_duration = None
@@ -189,7 +191,9 @@ class CyclingSolver:
                 self.cycle_cop.append(None)
                 self.cycle_elec_used.append(0)  # to Watt.hours
             # Emitter to room. Use of flow temp from start should be OK if time steps small enough
-            energy_from_fluid = self.time_step_secs * self.emitter.output(room_temp, flow_temp)
+            emitter_output = self.emitter.output(room_temp, flow_temp)
+            energy_from_fluid = self.time_step_secs * emitter_output
+            self.cycle_emitter_output.append(emitter_output)
 
             # update flow temp
             flow_temp += (energy_to_fluid - energy_from_fluid) / (4.2 * self.fluid_volume * 1000)

@@ -4,10 +4,7 @@ from flask import Blueprint, render_template
 base_app = Blueprint("base_app", __name__)
 top_menus = [
     {"path": "/room_temp", "title": "Room Temp"},
-    # {"path": "/control", "title": "Control"},
-    # {"path": "/core_config", "title": "Config"},
-    # {"path": "/profile_config", "title": "Profiles"},
-    # {"path": "/history", "title": "History"}
+    {"path": "/cycling", "title": "Cycling"}
 ]
 
 

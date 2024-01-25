@@ -57,7 +57,7 @@ def create_dash(server):
         html.Div(
             [
                 html.H1("Room Temperature Simulation", className="header-title"),
-                html.P("Space for notes.", className="header-description")
+                html.P("Heating system heat capacity is neglected.", className="header-description")
             ],
             className="header"),
 
@@ -85,12 +85,12 @@ def create_dash(server):
                         html.Div(dcc.Input(type="number", id="emitter_std_power"), className=right_col_class)
                     ], className="row"
                 ),
-                html.Div(
-                    [
-                        html.Div([html.Label("Heating Fluid Volume (l)")], className=left_col_class),
-                        html.Div(dcc.Input(type="number", id="fluid_volume"), className=right_col_class)
-                    ], className="row"
-                ),
+                # html.Div(
+                #     [
+                #         html.Div([html.Label("Heating Fluid Volume (l)")], className=left_col_class),
+                #         html.Div(dcc.Input(type="number", id="fluid_volume"), className=right_col_class)
+                #     ], className="row"
+                # ),
                 html.Div(
                     [
                         html.Div([html.Label("Thermal Mass Parameter")], className=left_col_class),
@@ -206,7 +206,7 @@ def create_dash(server):
         [
             Output("heat_loss_factor", "value"),
             Output("emitter_std_power", "value"),
-            Output("fluid_volume", "value"),
+            # Output("fluid_volume", "value"),
             Output("tmp", "value"),
             Output("floor_area", "value")
         ],
@@ -217,7 +217,7 @@ def create_dash(server):
         outputs = [
             building_data["heat_loss_factor"],
             building_data["emitter_std_power"],
-            building_data["fluid_volume"],
+            # building_data["fluid_volume"],
             tmp_options[building_data["tmp_category"]],
             building_data["floor_area"]
         ]
@@ -241,14 +241,22 @@ def create_dash(server):
         [
             State("heat_loss_factor", "value"),
             State("emitter_std_power", "value"),
-            State("fluid_volume", "value"),
+            # State("fluid_volume", "value"),
             State("tmp", "value"),
             State("floor_area", "value"),
             State("cop_model", "value"),
             State("ambient_model", "value"),
         ] + [State(f"target_{hour:02d}", "value") for hour in range(24)]
     )
-    def compute(n_clicks, heat_loss_factor, emitter_std_power, fluid_volume, tmp, floor_area, cop_model, ambient_model, *target_temps):
+    def compute(n_clicks,
+                heat_loss_factor,
+                emitter_std_power,
+                # fluid_volume,
+                tmp,
+                floor_area,
+                cop_model,
+                ambient_model,
+                *target_temps):
         if ctx.triggered_id is None:  # no compute on initial load
             return [no_update, no_update, "", ""]
 
@@ -258,8 +266,8 @@ def create_dash(server):
             "heat_loss_factor": float(heat_loss_factor),
             "emitter_std_power": float(emitter_std_power),
             "tmp": float(tmp),
-            "floor_area": float(floor_area),
-            "fluid_volume": float(fluid_volume)
+            "floor_area": float(floor_area)
+            # "fluid_volume": float(fluid_volume)
         }
 
         solver = RoomTempSolver(building_params, cop_model, ambient_model, target_temps_hourly=target_temps, initial_temp=16, steps_per_hour=6)
@@ -280,14 +288,14 @@ def create_dash(server):
                 "x": formatted_times,
                 "y": solver.iter_room_temp,
                 "mode": "lines",
-                "hovertemplate": "Rm: %{y:.1f}C @ %{x}<extra></extra>",
+                "hovertemplate": "Rm: %{y:.1f}C @ t=%{x}<extra></extra>",
                 "name": "Room"
             },
             {
                 "x": formatted_times,
                 "y": solver.ambient_temps,
                 "mode": "lines",
-                "hovertemplate": "Outside: %{y:.1f}C @ %{x}<extra></extra>",
+                "hovertemplate": "Outside: %{y:.1f}C @ t=%{x}<extra></extra>",
                 "name": "Ambient"
             },
             # power in. Solver returns Watt.hours
@@ -295,7 +303,7 @@ def create_dash(server):
                 "x": formatted_times,
                 "y": [wh / solver.time_step_duration / 1000 for wh in solver.iter_elec_used],
                 "mode": "lines",
-                "hovertemplate": "Power: %{y:.1f}kW @ %{x}<extra></extra>",
+                "hovertemplate": "Power: %{y:.1f}kW @ t=%{x}<extra></extra>",
                 "name": "Power",
                 "yaxis": "y2",
             }
@@ -341,14 +349,14 @@ def create_dash(server):
                 "x": formatted_times,
                 "y": [wh / solver.time_step_duration / 1000 for wh in solver.iter_elec_used],
                 "mode": "lines",
-                "hovertemplate": "In: %{y:.1f}kW @ %{x}<extra></extra>",
+                "hovertemplate": "In: %{y:.1f}kW @ t=%{x}<extra></extra>",
                 "name": "Power In"
             },
             {
                 "x": formatted_times,
                 "y": [None if cop is None else cop * wh / solver.time_step_duration / 1000 for wh, cop in zip(solver.iter_elec_used, solver.cops)],
                 "mode": "lines",
-                "hovertemplate": "Out: %{y:.1f}kW @ %{x}<extra></extra>",
+                "hovertemplate": "Out: %{y:.1f}kW @ t=%{x}<extra></extra>",
                 "name": "Power Out"
             },
             # COP
@@ -356,7 +364,7 @@ def create_dash(server):
                 "x": formatted_times,
                 "y": solver.cops,
                 "mode": "lines",
-                "hovertemplate": "COP: %{y:.2f} @ %{x}<extra></extra>",
+                "hovertemplate": "COP: %{y:.2f} @ t=%{x}<extra></extra>",
                 "name": "COP",
                 "yaxis": "y2",
             }
