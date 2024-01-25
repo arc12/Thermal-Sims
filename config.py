@@ -83,6 +83,35 @@ def get_cop_point_options(vs="ambient"):
                 "COP": (1.85, 2.05, 2.55, 3.25, 3.45, 3.80),
                 "capacity": 8500  # Watts
             },
+            # WM112
+            "WM112_LWT35": {
+                "LWT": 35,
+                "dT": 5,
+                "T_amb": (-15, -10, -7, 2, 7, 12, 15),
+                "COP": (2.55, 2.75, 3.00, 3.44, 4.70, 6.05, 6.85),
+                "capacity": 11200  # Watts
+            },
+            "WM112_LWT40": {
+                "LWT": 40,
+                "dT": 5,
+                "T_amb": (-15, -10, -7, 2, 7, 12, 15),
+                "COP": (2.30, 2.50, 2.75, 3.05, 4.20, 5.45, 6.15),
+                "capacity": 11200  # Watts
+            },
+            "WM112_LWT45": {
+                "LWT": 45,
+                "dT": 5,
+                "T_amb": (-15, -10, -7, 2, 7, 12, 15),
+                "COP": (2.05, 2.25, 2.50, 2.74, 3.70, 4.85, 5.50),
+                "capacity": 11200  # Watts
+            },
+            "WM112_LWT50": {
+                "LWT": 50,
+                "dT": 5,
+                "T_amb": (-10, -7, 2, 7, 12, 15),
+                "COP": (1.75, 1.90, 2.20, 2.30, 3.35, 4.20, 4.75),
+                "capacity": 10600  # Watts
+            },
             # this is about what the oil boiler does "full-on".
             # the mean flow temp is generally around 50 once room up to 15C or so
             "Direct_LWT70": {
@@ -122,19 +151,13 @@ def get_cop_point_options(vs="ambient"):
     else:
         # vs LWT. Capacities chosen for LWT=40.
         cops = {
-            "WM85_AMB-7": {
-                "T_amb": -7,
+            # WM85 is approx 8kW capacity
+            "WM85_AMB+12": {
+                "T_amb": 12,
                 "dT": 5,
                 "LWT": (25, 35, 40, 45, 50, 55),
-                "COP": (2.70, 2.50, 2.30, 2.10, 1.85, 1.65),
-                "capacity": 3200  # Watts
-            },
-            "WM85_AMB+2": {
-                    "T_amb": 2,
-                    "dT": 5,
-                    "LWT": (25, 35, 40, 45, 50, 55),
-                    "COP": (4.65, 4.15, 3.65, 3.15, 2.75, 2.40),
-                    "capacity": 3400  # Watts
+                "COP": (6.90, 6.05, 5.20, 4.40, 3.70, 3.05),
+                "capacity": 2700  # Watts
             },
             "WM85_AMB+7": {
                     "T_amb": 7,
@@ -143,13 +166,50 @@ def get_cop_point_options(vs="ambient"):
                     "COP": (5.95, 5.20, 4.45, 3.75, 3.20, 2.65),
                     "capacity": 3100  # Watts
             },
-            "WM85_AMB+12": {
-                    "T_amb": 12,
+            "WM85_AMB+2": {
+                    "T_amb": 2,
                     "dT": 5,
                     "LWT": (25, 35, 40, 45, 50, 55),
-                    "COP": (6.90, 6.05, 5.20, 4.40, 3.70, 3.05),
-                    "capacity": 2700  # Watts
-            }
+                    "COP": (4.65, 4.15, 3.65, 3.15, 2.75, 2.40),
+                    "capacity": 3400  # Watts
+            },
+            "WM85_AMB-7": {
+                "T_amb": -7,
+                "dT": 5,
+                "LWT": (25, 35, 40, 45, 50, 55),
+                "COP": (2.70, 2.50, 2.30, 2.10, 1.85, 1.65),
+                "capacity": 3200  # Watts
+            },
+            # WM112 is approx 11kW capacity
+            "WM112_AMB+12": {
+                "T_amb": 12,
+                "dT": 5,
+                "LWT": (25, 35, 40, 45, 50, 55),
+                "COP": (6.3, 5.85, 5.4, 4.95, 4.3, 3.65),
+                "capacity": 3800  # Watts
+            },
+            "WM112_AMB+7": {
+                "T_amb": 7,
+                "dT": 5,
+                "LWT": (25, 35, 40, 45, 50, 55),
+                "COP": (4.95, 4.45, 3.95, 3.50, 3.05, 2.60),
+                "capacity": 3700  # Watts
+            },
+            "WM112_AMB+2": {
+                "T_amb": 2,
+                "dT": 5,
+                "LWT": (25, 35, 40, 45, 50, 55),
+                "COP": (4.25, 3.75, 3.25, 2.75, 2.4, 2.1),
+                "capacity": 4000  # Watts
+            },
+            "WM112_AMB-7": {
+                "T_amb": -7,
+                "dT": 5,
+                "LWT": (25, 35, 40, 45, 50, 55),
+                "COP": (3.15, 2.85, 2.55, 2.30, 2.00, 1.70),
+                "capacity": 3700  # Watts
+            },
+
         }
     return cops
 
