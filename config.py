@@ -21,21 +21,22 @@ class Config(object):
 def get_building_default_options():
     # initial parameters for building.
     d = {
-        "Kitchen": {  # Current kitchen
-            "heat_loss_factor": 100,  # W/K
-            "emitter_std_power": 4500,  # W @ dT(rad-room)=50C
-            "tmp_category": "Lower Medium",  # thermal mass parameter lookup name
-            "floor_area": 28,
+        "Kitchen": {  # Current kitchen emitters for power output but volume closer to intended
+            "heat_loss_factor": 88,  # W/K; 100 from MCS spreadsheet with 2 air changes, 88 with 1.5 changes (yr 2000+ build).
+            "emitter_std_power": 4500,  # W @ dT(rad-room)=50C; current rads = 2.9kW + kickspace at low speed = 1.7kW. Reduce slightly for cooler water in KS
+            "tmp_category": "Mid Medium",  # thermal mass parameter lookup name
+            "floor_area": 28,  # kitchen = 26 + utility = 10
             # volume of circulating water (pipes + rads) in litres. Excl volumiser (option in UI)
-            "fluid_volume": 20  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
+            "fluid_volume": 22  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
         },
-        "Whole": {  # TODO THESE VALUES NEED SETTING
-            "heat_loss_factor": 100,  # W/K
-            "emitter_std_power": 4500,  # W @ dT(rad-room)=50C
-            "tmp_category": "Lower Medium",  # thermal mass parameter lookup name
-            "floor_area": 28,
+        "Whole": {
+            "heat_loss_factor": 215,  # W/K; 215 from MCS spreadsheet with "category B" ventilation rates (yr 2000 + build date).
+            "emitter_std_power": 15000,  # W @ dT(rad-room)=50C; 12kW from rads + new fancoils in kitchen and bathroom *
+            # * - kitchen max assume 2.4kW min 1.8kW; bathroom only use on low 650W. For cycling sims, use without fancoils (would be off if mild weather)
+            "tmp_category": "Mid Medium",  # thermal mass parameter lookup name
+            "floor_area": 80,
             # volume of circulating water (pipes + rads) in litres. Excl volumiser (option in UI)
-            "fluid_volume": 20  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
+            "fluid_volume": 45  # TODO NOT properly estimated !!
         }
     }
     return d
@@ -114,9 +115,9 @@ def get_cop_point_options(vs="ambient"):
             },
             # this is about what the oil boiler does "full-on".
             # the mean flow temp is generally around 50 once room up to 15C or so
-            "Direct_LWT70": {
-                "LWT": 70,
-                "dT": 5,
+            "Direct_LWT60": {
+                "LWT": 60,
+                "dT": 8,
                 "T_amb": (-10, 15),
                 "COP": (1.0, 1.0),
                 "capacity": 10000  # Watts
@@ -208,7 +209,8 @@ def get_cop_point_options(vs="ambient"):
                 "LWT": (25, 35, 40, 45, 50, 55),
                 "COP": (3.15, 2.85, 2.55, 2.30, 2.00, 1.70),
                 "capacity": 3700  # Watts
-            },
+            }
+            # EDLA - 04-08 min input 300W? 09-16 min input 900W
 
         }
     return cops
@@ -233,9 +235,9 @@ def get_ambient_hr_options():
             5.5,  # 18
             4.8  # 21
         ],
-        "Cold Snap": [
-
-        ],
+        # "Cold Snap": [
+        #
+        # ],
         "Constant 10": [10.0] * 8,
         "Constant 7": [7.0] * 8,
         "Constant 2": [2.0] * 8,
@@ -267,6 +269,7 @@ def get_tmp_options():
     tmp = {
         "Low": 90,
         "Lower Medium": 110,
+        "Mid Medium": 150,
         "Upper Medium": 200,
         "High": 300,
         "Very High": 450
