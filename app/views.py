@@ -3,6 +3,8 @@ from flask import Blueprint, render_template
 
 base_app = Blueprint("base_app", __name__)
 top_menus = [
+    {"path": "/ambient", "title": "Ambient"},
+    {"path": "/cop_curves", "title": "COP Curves"},
     {"path": "/room_temp", "title": "Room Temp"},
     {"path": "/cycling", "title": "Cycling"}
 ]
