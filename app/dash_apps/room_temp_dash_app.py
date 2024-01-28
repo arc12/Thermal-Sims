@@ -130,6 +130,18 @@ def create_dash(server):
                     ],
                     className="row"
                 ),
+                # html.Div(
+                #     [
+                #         html.Div([html.Label("Passive Heating (W)")], className=left_col_class),
+                #         html.Div(dcc.Input(type="number", value=0, id="passive_heat"), className=right_col_class)
+                #     ], className="row"
+                # ),
+                # html.Div(
+                #     [
+                #         html.Div(className=left_col_class),
+                #         html.Div(html.I("80W per person + 100W per PC/TV + a bit for fridge etc"), className=right_col_class)
+                #     ], className="row"
+                # ),
                 html.Hr(),
 
             ],
@@ -192,6 +204,21 @@ def create_dash(server):
                     ],
                     className="row"
                 ),
+
+                html.Div(
+                    [
+                        html.Div([html.Label("Batch Set")], className=left_col_class),
+                        html.Div(
+                            [
+                                dcc.Input(type="number", value=13, id="batch_set_value"),
+                                html.Button("Early Hours", id="batch_set_eh"),
+                                html.Button("Night", id="batch_set_night"),
+                                html.Button("Day", id="batch_set_day")
+                            ], className=right_col_class)
+                    ],
+                    className="row"
+                ),
+
                 html.Div([html.Label("Hour")])
             ] +
             slider_inputs,
@@ -225,10 +252,24 @@ def create_dash(server):
 
     @app.callback(
         [Output(f"target_{hour:02d}", "value") for hour in range(24)],
-        Input("target_temp_profile", "value")
+        [
+            Input("target_temp_profile", "value"),
+            Input("batch_set_eh", "n_clicks"),
+            Input("batch_set_night", "n_clicks"),
+            Input("batch_set_day", "n_clicks")
+        ],
+        [State("batch_set_value", "value")] + [State(f"target_{hour:02d}", "value") for hour in range(24)]
     )
-    def select_profile(target_temp_profile):
-        return target_temp_options[target_temp_profile]  # should just be a list of target temps for each hour of a day
+    def select_profile(target_temp_profile, eh_clicks, night_clicks, day_clicks, set_value, *target_values):
+        if (ctx.triggered_id == "target_temp_profile") or (ctx.triggered_id is None):
+            target_values = target_temp_options[target_temp_profile]  # output should just be a list of target temps for each hour of a day
+        elif ctx.triggered_id == "batch_set_eh":
+            target_values = [set_value] * 5 + list(target_values[5:])
+        elif ctx.triggered_id == "batch_set_night":
+            target_values = [set_value] * 9 + list(target_values[9:])
+        elif ctx.triggered_id == "batch_set_day":
+            target_values = list(target_values[:9]) + [set_value] * 15
+        return target_values
 
     @app.callback(
         [
@@ -245,7 +286,8 @@ def create_dash(server):
             State("tmp", "value"),
             State("floor_area", "value"),
             State("cop_model", "value"),
-            State("ambient_model", "value"),
+            State("ambient_model", "value")
+            # State("passive_heat", "value")
         ] + [State(f"target_{hour:02d}", "value") for hour in range(24)]
     )
     def compute(n_clicks,
@@ -256,6 +298,7 @@ def create_dash(server):
                 floor_area,
                 cop_model,
                 ambient_model,
+                # passive_heat,
                 *target_temps):
         if ctx.triggered_id is None:  # no compute on initial load
             return [no_update, no_update, "", ""]
@@ -270,25 +313,33 @@ def create_dash(server):
             # "fluid_volume": float(fluid_volume)
         }
 
-        solver = RoomTempSolver(building_params, cop_model, ambient_model, target_temps_hourly=target_temps, initial_temp=16, steps_per_hour=6)
+        solver = RoomTempSolver(building_params, cop_model, ambient_model, target_temps_hourly=target_temps,  # passive_heat=passive_heat,
+                                initial_temp=16, steps_per_hour=12)
 
-        MAX_ITERS = 10
-        while (solver.mean_t_iter_delta > 0.1) and (solver.n_iterations < MAX_ITERS):
+        MAX_ITERS = 20
+        CONV_THRESHOLD = 0.05
+        print("Iterations:")
+        print("\tfull_day_energy \tfull_day_energy_delta \tmax_t_iter_delta \tmean_t_iter_delta")
+        while (solver.full_day_energy_delta > CONV_THRESHOLD) and (solver.n_iterations < MAX_ITERS):
             solver.iterate()
-            print(solver.max_t_iter_delta, solver.mean_t_iter_delta)
+            print(f"{solver.n_iterations}: \t{solver.full_day_energy:.3f} \t\t\t\t{solver.full_day_energy_delta:.4f} \t\t\t\t\t{solver.max_t_iter_delta:.4f} \t\t\t\t{solver.mean_t_iter_delta:.4f}")
 
-        if solver.n_iterations == MAX_ITERS:
-            error_msg = f"Failed to converge after {MAX_ITERS} solver iterations."
+        if (solver.full_day_energy_delta > CONV_THRESHOLD) and (solver.n_iterations == MAX_ITERS):
+            error_msg = f"Failed to converge after {MAX_ITERS} solver iterations. Last energy delta={solver.full_day_energy_delta:.3f}kWh. Try increasing steps_per_hour."
 
         formatted_times = [f"{int(t):02d}:{int(t * 60 + 0.5) % 60:02d}" for t in solver.times]
+        rt_diffs = [(solver.iter_room_temp[i + 1] - solver.iter_room_temp[i]) for i in range(len(solver.iter_room_temp) - 1)]
+        rt_diffs.append(solver.iter_room_temp[0] - solver.iter_room_temp[-1])
+        rt_rates = [r / solver.time_step_duration for r in rt_diffs]
 
         tc_data_chunks = [
             # temps
             {
                 "x": formatted_times,
                 "y": solver.iter_room_temp,
+                "text": rt_rates,
                 "mode": "lines",
-                "hovertemplate": "Rm: %{y:.1f}C @ t=%{x}<extra></extra>",
+                "hovertemplate": "Rm: %{y:.1f}C @ t=%{x}<br>Rate: %{text:.2f}C/hr<extra></extra>",
                 "name": "Room"
             },
             {
@@ -313,7 +364,7 @@ def create_dash(server):
         y0 = min(int(min(solver.ambient_temps)), int(min(solver.iter_room_temp)))
         shapes = list()
         shape_template = {
-            "fillcolor": "red",
+            # "fillcolor": "blue",
             "line": {"width": 0},
             "opacity": 0.2,
             "type": "rect",
@@ -322,12 +373,10 @@ def create_dash(server):
             "y0": y0,
             "y1": None
             }
-        for hr, target_temp in enumerate(solver.target_temps):
+        for hr, target_temp in enumerate(target_temps):
             if target_temp > y0:  # see above
-                # x0 = f"{hr:02d}:00"
-                # x1 = f"{hr+1:02d}:59"
-                x0, x1 = hr, hr+1
-                shape_template.update({"x0": x0, "x1": x1, "y1": target_temp})
+                x0, x1 = hr * solver.steps_per_hour, (hr + 1) * solver.steps_per_hour  # x index is really steps
+                shape_template.update({"x0": x0, "x1": x1, "y1": target_temp, "fillcolor": "red" if hr >= 9 else "blue"})
                 shapes.append(shape_template.copy())
 
         tc_layout_chunk = {
@@ -372,7 +421,7 @@ def create_dash(server):
 
         pwr_layout_chunk = {
             "title": {
-                "text": f"Power and COP",
+                "text": f"ASHP Power and COP",
                 "x": 0.05,
                 "xanchor": "left",
             },
@@ -383,10 +432,9 @@ def create_dash(server):
         }
 
         # summary
-        total_energy = sum(solver.iter_elec_used) / 1000  # kWh
         clean_cops = [c for c in solver.cops if c is not None]
         mean_cop = sum(clean_cops) / len(clean_cops)
-        summary = f"Total Energy: {total_energy:.2f}kWh, Mean COP: {mean_cop:.2f}"
+        summary = f"Total Energy: {solver.full_day_energy:.2f}kWh, Mean COP: {mean_cop:.2f}"
 
         return [
             {"data": tc_data_chunks, "layout": tc_layout_chunk},

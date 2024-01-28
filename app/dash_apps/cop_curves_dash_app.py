@@ -40,7 +40,7 @@ def create_dash(server):
                     [
                         html.Div([html.Label("COP vs")], className=left_col_class),
                         html.Div(
-                            dcc.Dropdown(options={"ambient": "Ambient", "lwt": "LWT"}, value="amb",
+                            dcc.Dropdown(options={"ambient": "Ambient", "lwt": "LWT"}, value="ambient",
                                          clearable=False, searchable=False, id="cop_vs"),
                             className=right_col_class)
                     ], className="row"
@@ -51,6 +51,13 @@ def create_dash(server):
                         html.Div(
                             dcc.Dropdown(clearable=False, searchable=False, multi=True, id="cop_model"),
                             className=right_col_class)
+                    ],
+                    className="row"
+                ),
+                html.Div(
+                    [
+                        html.Div([html.Label("Show points")], className=left_col_class),
+                        html.Div(dcc.Checklist(options={"yes": ""}, id="show_points"), className=right_col_class)
                     ],
                     className="row"
                 )
@@ -90,16 +97,20 @@ def create_dash(server):
             Output("cop_chart", "figure")
             # Output("summary_results", "children")
         ],
-        Input("cop_model", "value"),
+        [
+            Input("cop_model", "value"),
+            Input("show_points", "value")
+        ],
         State("cop_vs", "value")
     )
-    def compute(cop_model_options, cop_vs):
-        if ctx.triggered_id is None:  # no compute on initial load
+    def compute(cop_model_options, show_points, cop_vs):
+        if cop_model_options is None:  # no compute on initial load or if show_points changed before setting COP model
             return [no_update]
 
         cop_defs = get_cop_point_options(cop_vs)
 
         data_chunks = []
+        points_chunks = []
         if cop_vs == "ambient":
             temps = list(range(-10, 13))
             t_key = "T_amb"
@@ -114,17 +125,19 @@ def create_dash(server):
 
             # points
             t_points, cop_points = cop_def[t_key], cop_def["COP"]
-            # skip this for now as it makes the legend messy (if points in legend) or the use of the legend to show/hide curves silly (cant hide points if not in legend!)
-            # TODO add a checkbox to control point plotting
-            # data_chunks.append(
-            #     {
-            #         "x": t_points,
-            #         "y": cop_points,
-            #         "mode": "markers",
-            #         "hovertemplate": option + ": %{y:.2f} @ T=%{x}C<extra></extra>",
-            #         "name": option
-            #     }
-            # )
+            # points makes the legend messy (if points in legend) or the use of the legend to show/hide curves silly (cant hide points if not in legend!)
+            # so using a checkbox control is a middle way...
+            if show_points:
+                points_chunks.append(
+                    {
+                        "x": t_points,
+                        "y": cop_points,
+                        "mode": "markers",
+                        "marker": {"color": "grey", "symbol": "circle-open"},
+                        "hovertemplate": option + ": %{y:.2f} @ T=%{x}C<extra></extra>",
+                        "showlegend": False
+                    }
+                )
 
             # spline
             cop_model = COP(t_points, cop_points)
@@ -149,6 +162,6 @@ def create_dash(server):
             "yaxis": {"title": "COP", "fixedrange": False}
         }
 
-        return [{"data": data_chunks, "layout": layout_chunk}]
+        return [{"data": data_chunks + points_chunks, "layout": layout_chunk}]  # appending points_chunks keeps the line colours when points shown/hidden
 
     return app.server

@@ -110,8 +110,8 @@ def create_dash(server):
                 ),
                 html.Div(
                     [
-                        html.Div([html.Label("LWT & margin (C)")], className=left_col_class),
-                        html.Div([dcc.Input(type="number", value=40, id="max_lwt"), dcc.Input(type="number", value=5, id="lwt_margin")], className=right_col_class)
+                        html.Div([html.Label("LWT & overshoot (C)")], className=left_col_class),
+                        html.Div([dcc.Input(type="number", value=35, id="lwt"), dcc.Input(type="number", value=4, id="lwt_overshoot")], className=right_col_class)
                     ], className="row"
                 ),
                 html.Div(
@@ -212,8 +212,8 @@ def create_dash(server):
             State("tmp", "value"),
             State("floor_area", "value"),
             State("cop_model", "value"),
-            State("max_lwt", "value"),
-            State("lwt_margin", "value"),
+            State("lwt", "value"),
+            State("lwt_overshoot", "value"),
             State("hp_capacity", "value")
         ]
     )
@@ -224,7 +224,7 @@ def create_dash(server):
                 tmp,
                 floor_area,
                 cop_model,
-                max_lwt, lwt_margin,
+                lwt, lwt_overshoot,
                 hp_capacity):
         if ctx.triggered_id is None:  # no compute on initial load
             return [no_update, "", ""]
@@ -239,7 +239,7 @@ def create_dash(server):
             "fluid_volume": float(fluid_volume) + (float(volumiser_volume) if with_volumiser else 0)
         }
 
-        solver = CyclingSolver(building_params, cop_model, max_lwt=max_lwt, lwt_margin=lwt_margin, hp_capacity=hp_capacity, initial_temp=16, steps_per_minute=10)
+        solver = CyclingSolver(building_params, cop_model, lwt=lwt, lwt_overshoot=lwt_overshoot, hp_capacity=hp_capacity, initial_temp=17, steps_per_minute=10)
 
         MAX_ITERS = 100
         while (solver.iter_room_temp_delta > 0.05) and (solver.n_iterations < MAX_ITERS):
@@ -248,7 +248,7 @@ def create_dash(server):
 
         if solver.n_iterations == MAX_ITERS:
             error_msg = f"Failed to converge after {MAX_ITERS} solver iterations."
-        if solver.on_duration is None:
+        if solver.on_duration is None or solver.off_duration is None:
             return [{"data": [], "layout": {"title": {"text": "No Cycle"}}}, "", html.B("Cycle period exceeds simulation limit.", style={"background": "orange"})]
 
         power = [e / solver.time_step_secs * 3600 for e in solver.cycle_elec_used]  # Wh to W

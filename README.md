@@ -14,6 +14,5 @@ Simplifications:
 ### CyclingSolver
 
 Simplifications:
-- the model switches heating off when the LWT reaches a specified max. This isn't how a real pump is expected to work* but leads to a cyclic behaviour which is the objective.
-
-(* - A real HP is expected to modulate flow downwards to attempt to keep the returning temp down, until a minimum flow threshold)
+- the model switches heating off when the LWT reaches the specified LWT + a variable overshoot then switches it on again when the LWT falls below its setting. This is based on what I can glean from Daikin operation manual but is probably an over-simplification.
+- the HP only uses minimum power. This is probably a poor simplification; I suspect it will start the cycle at higher power.

@@ -6,7 +6,7 @@ from config import get_cop_point_options, get_ambient_hr_options
 
 
 class RoomTempSolver:
-    def __init__(self, building_parameters, cop_option, amb_option, target_temps_hourly, initial_temp, steps_per_hour=6):
+    def __init__(self, building_parameters, cop_option, amb_option, target_temps_hourly, passive_heat=0, initial_temp=16, steps_per_hour=6):
         """
         Computes room temperature against time and associated performance statistics for a target set of room temperatures, given
         building, ambient outside temperatures (varying with time), and heat pump properties.
@@ -15,6 +15,7 @@ class RoomTempSolver:
         :param cop_option: key into return from get_cop_point_options()
         :param amb_option: key into return from get_ambient_hr_options()
         :param target_temps_hourly: list of target temps for each hour
+        :param passive_heat: passive heating (people, computers, etc) in W
         :param initial_temp: starting temp
         :param steps_per_hour: number of steps per hour in the solver and for the iter_* variables.
         """
@@ -31,6 +32,7 @@ class RoomTempSolver:
         self.time_step_duration = 1 / steps_per_hour
         self.hysteresis = 0.5  # interval between on and off temps for a given target
         self.cop_model = COP(cop_defn["T_amb"], cop_defn["COP"])
+        self.passive_heat = passive_heat
 
         # current state
         self.heating_on = False
@@ -49,9 +51,13 @@ class RoomTempSolver:
         self.cops = list()  # this gets updated each iteration so that NAs are applied when the heating is not on. THIS IS RELIED ON in Dash app
         self.target_temps = [target_temp_lookup.temp(hr) for hr in self.times]
 
-        # use to test for convergence. These are ABSOLUTE changes, i.e. |delta|
-        # Beware that can get non-convergence when assessed by max_t_iter_delta (in particular).
-        # I suspect this is down to switch on/off events landing in different time slices and the lack of treatment of heating fluid "thermal mass"
+        # use as a "result" and to assess convergence
+        self.full_day_energy = 0  # kWh
+        self.full_day_energy_delta = 99  # absolute change
+
+        # use to assess convergence. These are ABSOLUTE changes, i.e. |delta|
+        # Beware that max_t_iter_delta (in particular) can show instability. I suspect this is down to switch on/off events landing in different time slices.
+        # This can be mitigated by increasing the number of steps per hour.
         self.max_t_iter_delta = 99
         self.mean_t_iter_delta = 99
         # and an iteration counter for non-convergence exit
@@ -86,7 +92,7 @@ class RoomTempSolver:
                 emitted = 0
                 elec_used = 0
 
-            room_temp_change = (emitted - lost) / self.heat_capacity
+            room_temp_change = (emitted - lost + self.passive_heat * self.time_step_duration) / self.heat_capacity
             self.current_temp += room_temp_change
             room_temp_iter_delta = fabs(self.iter_room_temp[ix] - self.current_temp)
             max_t_iter_delta = max(max_t_iter_delta, room_temp_iter_delta)
@@ -98,9 +104,13 @@ class RoomTempSolver:
         self.max_t_iter_delta = max_t_iter_delta
         self.mean_t_iter_delta = sum_t_iter_delta / len(self.times)
 
+        energy_kwh = sum(self.iter_elec_used) / 1000
+        self.full_day_energy_delta = fabs(self.full_day_energy - energy_kwh)
+        self.full_day_energy = energy_kwh
+
 
 class CyclingSolver:
-    def __init__(self, building_parameters, cop_option, max_lwt, hp_capacity, initial_temp, lwt_margin=5, steps_per_minute=5):
+    def __init__(self, building_parameters, cop_option, lwt, hp_capacity, initial_temp, lwt_overshoot=4, steps_per_minute=5):
         """
         Computes HP on/off cycles and system fluid temp (actual LWT) against time and associated performance statistics for a variable HP capacity and max LWT,
         given building, fixed ambient outside temperatures, and heat pump properties.
@@ -110,7 +120,7 @@ class CyclingSolver:
 
         :param building_parameters: dict with same keys as returned by get_building_defaults() except that there should be a "tmp" key with a value for thermal mass parameter
         :param cop_option: key into return from get_cop_point_options(vs="lwt"), which also gives fixed ambient temp
-        :param max_lwt: LWT which the HP is aiming at. It will switch off when this is reached.
+        :param lwt: LWT which the HP is aiming at. It will switch off when this is reached.
         :param hp_capacity: output power in Watts of the HP
         :param initial_temp: starting room temp
         :param steps_per_minute: number of steps per minute in the solver and for the iter_* variables.
@@ -127,13 +137,12 @@ class CyclingSolver:
 
         # other setup
         self.time_step_secs = 60 / steps_per_minute
-        self.max_lwt = max_lwt
+        self.lwt = lwt  # this is the desired, not necessarily the actual lwt
         self.hp_capacity = hp_capacity
-        self.lwt_margin = lwt_margin  # difference below max_lwt at which the HP will switch off.
+        self.lwt_overshoot = lwt_overshoot  # difference above max_lwt at which the HP will switch off.
 
         # current state
         self.cycle_start_room_temp = initial_temp
-        self.max_lwt = max_lwt
 
         # time series after last iteration. Unknown length but limited to max_steps
         self.max_steps = 600  # for shorter cycle periods, steps_per_minute should be higher and vice versa
@@ -170,7 +179,7 @@ class CyclingSolver:
         self.off_duration = None
 
         room_temp = self.cycle_start_room_temp
-        flow_temp = self.max_lwt - self.lwt_margin
+        flow_temp = self.lwt
         heating_on = True
 
         step = 0
@@ -205,11 +214,11 @@ class CyclingSolver:
             room_temp += room_temp_change
 
             # check if the max LWT was reached => turn compressor off
-            if flow_temp > self.max_lwt:
+            if flow_temp > self.lwt + self.lwt_overshoot:
                 heating_on = False
                 self.on_duration = step * self.time_step_secs / 60
-            # or if the heating is off and we've got below the threshold, the cycle has ended
-            if (flow_temp < self.max_lwt - self.lwt_margin) and not heating_on:
+            # if the heating is off and we've got below the desired, the cycle has ended
+            elif (flow_temp < self.lwt) and not heating_on:
                 print(f"Cycle ended after {step} steps")
                 self.off_duration = step * self.time_step_secs / 60 - self.on_duration
                 break
