@@ -128,10 +128,11 @@ class CyclingSolver:
         cop_defn = get_cop_point_options(vs="lwt")[cop_option]
         self.cop_model = COP(cop_defn["LWT"], cop_defn["COP"])
         self.ambient_temp = cop_defn["T_amb"]
+        self.ht_dT = cop_defn["dT"]
 
         # building setup
         self.heat_loss_factor = building_parameters["heat_loss_factor"]
-        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"] - cop_defn["dT"] / 2)
+        self.emitter = Radiator(building_parameters["emitter_std_power"], lwt - self.ht_dT / 2)
         self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
         self.fluid_volume = building_parameters["fluid_volume"]  # litres
 
@@ -200,7 +201,7 @@ class CyclingSolver:
                 self.cycle_cop.append(None)
                 self.cycle_elec_used.append(0)  # to Watt.hours
             # Emitter to room. Use of flow temp from start should be OK if time steps small enough
-            emitter_output = self.emitter.output(room_temp, flow_temp)
+            emitter_output = self.emitter.output(room_temp, flow_temp - self.ht_dT / 2)
             energy_from_fluid = self.time_step_secs * emitter_output
             self.cycle_emitter_output.append(emitter_output)
 

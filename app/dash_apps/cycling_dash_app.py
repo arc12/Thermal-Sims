@@ -39,7 +39,8 @@ def create_dash(server):
         html.Div(
             [
                 html.H1("ASHP Cycling Simulation", className="header-title"),
-                html.P("Simulation against a steady state environment.", className="header-description")
+                html.P("Simulation against a steady state environment.", className="header-description"),
+                html.P(html.B("This makes some quite unrealistic assumptions!"))
             ],
             className="header"),
 
