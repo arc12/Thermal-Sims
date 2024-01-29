@@ -37,15 +37,14 @@ class Radiator:
         (50, 1.0)
     )
 
-    def __init__(self, power_at_dt50, flow_temp, dt):
+    def __init__(self, power_at_dt50, mean_water_temp):
         """
 
         :param power_at_dt50: power output in Watts at dT(room-rad) = 50C
-        :param flow_temp: radiator flow temp
+        :param mean_water_temp: radiator mean water temp
         :param dt: flow-return temp difference
         """
-        self.flow_temp = flow_temp
-        self.dT = dt
+        self.mean_water_temp = mean_water_temp
 
         # set up the output power lookup
         self._spline = CubicSpline(
@@ -53,17 +52,17 @@ class Radiator:
             [power_at_dt50 * p[1] for p in self.stelrad_correction_factor_points]
         )
 
-    def output(self, room_temp, flow_temp=None):
+    def output(self, room_temp, mean_water_temp=None):
         """
         output in W for parameter value
         :param room_temp: room temp
-        :param flow_temp: override flow temp. If None, the value of the instance variable is used. If set, the instance variable is updated
+        :param mean_water_temp: override mean_water_temp temp. If None, the value of the instance variable is used. If set, the instance variable is updated
         :return:
         """
-        if flow_temp is not None:
-            self.flow_temp = flow_temp
-        mean_rad_temp = self.flow_temp - self.dT / 2
-        dt_rad_room = mean_rad_temp - room_temp
+        if mean_water_temp is not None:
+            self.mean_water_temp = mean_water_temp
+
+        dt_rad_room = self.mean_water_temp - room_temp
         return self._spline([dt_rad_room])[0]
 
 

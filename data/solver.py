@@ -24,7 +24,7 @@ class RoomTempSolver:
 
         # building setup
         self.heat_loss_factor = building_parameters["heat_loss_factor"]
-        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"], cop_defn["dT"])
+        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"] - cop_defn["dT"] / 2)
         self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
 
         # other setup
@@ -131,7 +131,7 @@ class CyclingSolver:
 
         # building setup
         self.heat_loss_factor = building_parameters["heat_loss_factor"]
-        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"], cop_defn["dT"])
+        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"] - cop_defn["dT"] / 2)
         self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
         self.fluid_volume = building_parameters["fluid_volume"]  # litres
 
