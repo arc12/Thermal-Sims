@@ -127,11 +127,12 @@ class CyclingSolver:
         """
         cop_defn = get_cop_point_options(vs="lwt")[cop_option]
         self.cop_model = COP(cop_defn["LWT"], cop_defn["COP"])
+        self.hp_dT = cop_defn["dT"]
         self.ambient_temp = cop_defn["T_amb"]
 
         # building setup
         self.heat_loss_factor = building_parameters["heat_loss_factor"]
-        self.emitter = Radiator(building_parameters["emitter_std_power"], cop_defn["LWT"] - cop_defn["dT"] / 2)
+        self.emitter = Radiator(building_parameters["emitter_std_power"], lwt - cop_defn["dT"] / 2)
         self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
         self.fluid_volume = building_parameters["fluid_volume"]  # litres
 
@@ -148,6 +149,8 @@ class CyclingSolver:
         self.max_steps = 600  # for shorter cycle periods, steps_per_minute should be higher and vice versa
         self.times_mins = list()  # mins into cycle for each step.
         self.cycle_flow_temp = list()  # used to record flow temps for each iteration. This is the flow temp at the start of each time step
+        self.cycle_return_temp = list()
+        self.mean_emitter_temp = list()
         self.cycle_elec_used = list()  # elec used during the step in W.h
         self.cycle_cop = list()  # COP based on the flow temp at the start of the step
         self.cycle_room_temp = list()
@@ -170,6 +173,8 @@ class CyclingSolver:
         self.n_iterations += 1
         self.times_mins = list()
         self.cycle_flow_temp = list()
+        self.cycle_return_temp = list()
+        self.mean_emitter_temp = list()
         self.cycle_elec_used = list()
         self.cycle_cop = list()
         self.cycle_room_temp = list()
@@ -179,33 +184,50 @@ class CyclingSolver:
         self.off_duration = None
 
         room_temp = self.cycle_start_room_temp
-        flow_temp = self.lwt
+        # start cycle as it should end
+        return_temp = self.lwt - self.hp_dT
+        flow_temp = return_temp
+        mean_emitter_temp = self.lwt - 3 * self.hp_dT / 4
         heating_on = True
 
         step = 0
         # NB unit of time in steps is seconds self.time_step_secs
         while step < self.max_steps:
-            self.times_mins.append(step * self.time_step_secs / 60)
             step += 1
-            cop = self.cop_model.cop(flow_temp)
-            self.cycle_flow_temp.append(flow_temp)
-            self.cycle_room_temp.append(room_temp)
-            # HP input
-            if heating_on:
-                energy_to_fluid = self.time_step_secs * self.hp_capacity  # Joules
-                self.cycle_cop.append(cop)
-                self.cycle_elec_used.append(energy_to_fluid / 3600 / cop)
-            else:
-                energy_to_fluid = 0
-                self.cycle_cop.append(None)
-                self.cycle_elec_used.append(0)  # to Watt.hours
-            # Emitter to room. Use of flow temp from start should be OK if time steps small enough
-            emitter_output = self.emitter.output(room_temp, flow_temp)
-            energy_from_fluid = self.time_step_secs * emitter_output
-            self.cycle_emitter_output.append(emitter_output)
+            self.times_mins.append(step * self.time_step_secs / 60)
 
-            # update flow temp
-            flow_temp += (energy_to_fluid - energy_from_fluid) / (4.2 * self.fluid_volume * 1000)
+            # Emitter to room.
+            emitter_output = self.emitter.output(room_temp, mean_emitter_temp)
+            energy_from_fluid = self.time_step_secs * emitter_output
+
+            # HP input. Could add circulation pump input too.
+            if heating_on:
+                cop = self.cop_model.cop(flow_temp)
+                # hackery to get initial heating boost.
+                boost = 0 if flow_temp > self.lwt - 1 else self.hp_capacity * (self.lwt - flow_temp + self.hp_dT / 2) / self.hp_dT
+                energy_to_fluid = self.time_step_secs * (self.hp_capacity + boost)  # Joules
+                self.cycle_cop.append(cop)
+                self.cycle_elec_used.append(energy_to_fluid / 3600 / cop)  # to Watt.hours
+                # update fluid temp
+                flow_temp += energy_to_fluid / (4.2 * self.fluid_volume * 1000)
+                met_delta = (energy_to_fluid - energy_from_fluid) / (4.2 * self.fluid_volume * 1000)
+                mean_emitter_temp += met_delta
+                # funky guesswork at return temp. avoid having flow rate explicit
+                return_temp = max(flow_temp - self.hp_dT, return_temp + met_delta / 2)
+            else:
+                self.cycle_cop.append(None)
+                self.cycle_elec_used.append(0)
+                # update fluid temp
+                met_delta = energy_from_fluid / (4.2 * self.fluid_volume * 1000)
+                mean_emitter_temp -= met_delta
+                return_temp -= met_delta / 2
+                flow_temp = return_temp
+
+            self.cycle_emitter_output.append(emitter_output)
+            self.cycle_flow_temp.append(flow_temp)
+            self.cycle_return_temp.append(return_temp)
+            self.mean_emitter_temp.append(mean_emitter_temp)
+            self.cycle_room_temp.append(room_temp)
 
             # update room temperature. NB these are in Watt.hours
             room_lost = self.heat_loss_factor * (room_temp - self.ambient_temp) * self.time_step_secs / 3600
@@ -218,7 +240,7 @@ class CyclingSolver:
                 heating_on = False
                 self.on_duration = step * self.time_step_secs / 60
             # if the heating is off and we've got below the desired, the cycle has ended
-            elif (flow_temp < self.lwt) and not heating_on:
+            elif (return_temp < self.lwt - self.hp_dT) and not heating_on:
                 print(f"Cycle ended after {step} steps")
                 self.off_duration = step * self.time_step_secs / 60 - self.on_duration
                 break

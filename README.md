@@ -10,9 +10,12 @@ Assumptions:
 Simplifications:
 - a single emitter + single envelope model.
 - no heating or cooling phase for the emitters and heating water.
+- circulation pump power neglected
 
 ### CyclingSolver
 
 Simplifications:
 - the model switches heating off when the LWT reaches the specified LWT + a variable overshoot then switches it on again when the LWT falls below its setting. This is based on what I can glean from Daikin operation manual but is probably an over-simplification.
 - the HP only uses minimum power. This is probably a poor simplification; I suspect it will start the cycle at higher power.
+- circulation pump power neglected
+- changes are instantaneous. e.g. as soon as the HP compressor stops flow temp falls to return; radiator cooling when compressor is off is immediately reflected in flow temp. 

@@ -39,7 +39,8 @@ def create_dash(server):
         html.Div(
             [
                 html.H1("ASHP Cycling Simulation", className="header-title"),
-                html.P("Simulation against a steady state environment.", className="header-description")
+                html.P("Simulation against a steady state environment.", className="header-description"),
+                html.B("The results should be considered highly suspect! There are too many assumptions/simplifications concerning HP behaviour and heat transfer")
             ],
             className="header"),
 
@@ -259,15 +260,29 @@ def create_dash(server):
                 "y": solver.cycle_flow_temp,
                 "mode": "lines",
                 "hovertemplate": "Flow: %{y:.1f}C @ t=%{x}<extra></extra>",
-                "name": "Flow"
+                "name": "Flow T"
+            },
+            {
+                "x": solver.times_mins,
+                "y": solver.cycle_return_temp,
+                "mode": "lines",
+                "hovertemplate": "Return: %{y:.1f}C @ t=%{x}<extra></extra>",
+                "name": "Return T"
+            },
+            {
+                "x": solver.times_mins,
+                "y": solver.mean_emitter_temp,
+                "mode": "lines",
+                "hovertemplate": "Mean Emitter: %{y:.1f}C @ t=%{x}<extra></extra>",
+                "name": "Mean Emitter T"
             },
             {
                 "x": solver.times_mins,
                 "y": power,
                 "text": solver.cycle_cop,
                 "mode": "lines",
-                "hovertemplate": "In: %{y:.1f}kW @ t=%{x}<br>COP = %{text:.2f}<extra></extra>",
-                "name": "In",
+                "hovertemplate": "In: %{y:.1f}W @ t=%{x}<br>COP = %{text:.2f}<extra></extra>",
+                "name": "In Pwr",
                 "yaxis": "y2",
             },
             {
@@ -275,7 +290,7 @@ def create_dash(server):
                 "y": solver.cycle_emitter_output,
                 "mode": "lines",
                 "hovertemplate": "Emitter: %{y:.1f}kW @ t=%{x}<extra></extra>",
-                "name": "Emitter",
+                "name": "Emitter Pwr",
                 "yaxis": "y2",
             }
         ]
