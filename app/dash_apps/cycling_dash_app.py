@@ -39,8 +39,8 @@ def create_dash(server):
         html.Div(
             [
                 html.H1("ASHP Cycling Simulation", className="header-title"),
-                html.P("Simulation against a steady state environment.", className="header-description"),
-                html.P(html.B("This makes some quite unrealistic assumptions!"))
+                html.P("Simulation against a steady state environment. 'Thermostat period' is the duration it is 'calling', given net warming from one HP cycle.", className="header-description"),
+                html.P(html.B("This makes some quite unrealistic assumptions! Definitely do not trust the COP."))
             ],
             className="header"),
 
@@ -121,6 +121,12 @@ def create_dash(server):
                         html.Div(dcc.Input(type="number", id="hp_capacity"), className=right_col_class)
                     ], className="row"
                 ),
+                html.Div(
+                    [
+                        html.Div([html.Label("Setpoint Temp (C)")], className=left_col_class),
+                        html.Div(dcc.Input(type="number", value=18, id="setpoint_temp"), className=right_col_class)
+                    ], className="row"
+                ),
 
                 html.Hr(),
 
@@ -147,7 +153,7 @@ def create_dash(server):
 
         html.Div(
             [
-                html.P(id="summary_results"),
+                html.Div(id="summary_results"),
                 html.Div([
                     html.Div([html.Button("Compute", id="compute")], className="col-md-2"),
                     html.Div(id="compute_errors", className="col-md-10")
@@ -215,7 +221,8 @@ def create_dash(server):
             State("cop_model", "value"),
             State("lwt", "value"),
             State("lwt_overshoot", "value"),
-            State("hp_capacity", "value")
+            State("hp_capacity", "value"),
+            State("setpoint_temp", "value")
         ]
     )
     def compute(n_clicks,
@@ -226,7 +233,8 @@ def create_dash(server):
                 floor_area,
                 cop_model,
                 lwt, lwt_overshoot,
-                hp_capacity):
+                hp_capacity,
+                setpoint_temp):
         if ctx.triggered_id is None:  # no compute on initial load
             return [no_update, "", ""]
 
@@ -240,28 +248,34 @@ def create_dash(server):
             "fluid_volume": float(fluid_volume) + (float(volumiser_volume) if with_volumiser else 0)
         }
 
-        solver = CyclingSolver(building_params, cop_model, lwt=lwt, lwt_overshoot=lwt_overshoot, hp_capacity=hp_capacity, initial_temp=17, steps_per_minute=10)
+        solver = CyclingSolver(building_params, cop_model, lwt=lwt, lwt_overshoot=lwt_overshoot, hp_capacity=hp_capacity, initial_temp=setpoint_temp,
+                               steps_per_minute=10)
 
-        MAX_ITERS = 100
-        while (solver.iter_room_temp_delta > 0.05) and (solver.n_iterations < MAX_ITERS):
-            solver.iterate()
-            print(solver.iter_room_temp_delta)
+        solver.iterate()
 
-        if solver.n_iterations == MAX_ITERS:
-            error_msg = f"Failed to converge after {MAX_ITERS} solver iterations."
         if solver.on_duration is None or solver.off_duration is None:
-            return [{"data": [], "layout": {"title": {"text": "No Cycle"}}}, "", html.B("Cycle period exceeds simulation limit.", style={"background": "orange"})]
+            return [
+                {"data": [], "layout": {"title": {"text": "No Cycle"}}},
+                "",
+                html.B(f"Cycle period exceeds simulation limit of {int(round(solver.max_steps * solver.time_step_secs / 60, 0))} minutes.", style={"background": "orange"})]
 
         power = [e / solver.time_step_secs * 3600 for e in solver.cycle_elec_used]  # Wh to W
 
         tc_data_chunks = [
             {
                 "x": solver.times_mins,
-                "y": solver.cycle_flow_temp,
+                "y": solver.mean_water_temp,
                 "mode": "lines",
-                "hovertemplate": "Flow: %{y:.1f}C @ t=%{x}<extra></extra>",
-                "name": "Flow"
+                "hovertemplate": "Mean Water: %{y:.1f}C @ t=%{x}<extra></extra>",
+                "name": "Mean Water Temp"
             },
+            # {
+            #     "x": solver.times_mins,
+            #     "y": solver.cycle_room_temp,
+            #     "mode": "lines",
+            #     "hovertemplate": "Room: %{y:.1f}C @ t=%{x}<extra></extra>",
+            #     "name": "Room Temp"
+            # },
             {
                 "x": solver.times_mins,
                 "y": power,
@@ -275,7 +289,7 @@ def create_dash(server):
                 "x": solver.times_mins,
                 "y": solver.cycle_emitter_output,
                 "mode": "lines",
-                "hovertemplate": "Emitter: %{y:.1f}kW @ t=%{x}<extra></extra>",
+                "hovertemplate": "Emitter: %{y:.1f}W @ t=%{x}<extra></extra>",
                 "name": "Emitter",
                 "yaxis": "y2",
             }
@@ -297,13 +311,16 @@ def create_dash(server):
         duty = round(100 * solver.on_duration / (solver.on_duration + solver.off_duration), 0)
         cycle_duration_hrs = (solver.on_duration + solver.off_duration) / 60
         starts_per_hour = 1 / cycle_duration_hrs
-        mean_room_temp = round(sum(solver.cycle_room_temp) / len(solver.cycle_room_temp), 1)
-        # min_room_temp = min(solver.cycle_room_temp)  # the range is actually rather small (down in 2nd decimal typical)
+        from math import fabs
+        thermostat_period = cycle_duration_hrs * 1 / fabs(solver.iter_room_temp_delta)  # estimate period for a 1C thermostat hysteresis around target temp
         mean_input_power = sum(solver.cycle_elec_used) / cycle_duration_hrs / 1000
         clean_cops = [c for c in solver.cycle_cop if c is not None]
         mean_cop = sum(clean_cops) / len(clean_cops)
-        summary = f"Starts/hr: {starts_per_hour:.1f}, Duty: {duty}%, Mean Room Temp: {mean_room_temp:.1f}C, Mean Power: {mean_input_power:.2f}kW, Mean COP: {mean_cop:.2f}"
-
+        summary = [
+            html.P(f"Starts/hr: {starts_per_hour:.1f}, Duty: {duty}%, Room Temp Change: {solver.iter_room_temp_delta:.1f}C, "
+                   f"Thermostatic Period: {thermostat_period:.1f}h"),
+            html.P(f"Mean Power: {mean_input_power:.2f}kW, Mean COP: {mean_cop:.2f}")
+        ]
         return [
             {"data": tc_data_chunks, "layout": tc_layout_chunk},
             summary,

@@ -143,12 +143,12 @@ class CyclingSolver:
         self.lwt_overshoot = lwt_overshoot  # difference above max_lwt at which the HP will switch off.
 
         # current state
-        self.cycle_start_room_temp = initial_temp
+        self.cycle_start_room_temp = initial_temp  # this is a chosen parameter. Preserved across iterations
 
         # time series after last iteration. Unknown length but limited to max_steps
-        self.max_steps = 600  # for shorter cycle periods, steps_per_minute should be higher and vice versa
+        self.max_steps = 1200  # for shorter cycle periods, steps_per_minute should be higher and vice versa
         self.times_mins = list()  # mins into cycle for each step.
-        self.cycle_flow_temp = list()  # used to record flow temps for each iteration. This is the flow temp at the start of each time step
+        self.mean_water_temp = list()  # used to record temps for each iteration. This is the water temp at the start of each time step
         self.cycle_elec_used = list()  # elec used during the step in W.h
         self.cycle_cop = list()  # COP based on the flow temp at the start of the step
         self.cycle_room_temp = list()
@@ -164,13 +164,13 @@ class CyclingSolver:
 
     def iterate(self):
         """
-        Computes flow temps for a single cycle (of unspecified duration but subject to a software limit!).
-        The difference in room temperature (at the start of a cycle) at the start and end of an iteration is available as a sign of convergence.
+        Computes flow temps for a single cycle (of unspecified duration but subject to a software limit!). Normally: only one call to iterate() is expected.
+        The room temperature might rise or fall during a cycle, but the effect on the HP would be down to thermostat (with hysteresis)
         :return:
         """
         self.n_iterations += 1
         self.times_mins = list()
-        self.cycle_flow_temp = list()
+        self.mean_water_temp = list()
         self.cycle_elec_used = list()
         self.cycle_cop = list()
         self.cycle_room_temp = list()
@@ -180,7 +180,7 @@ class CyclingSolver:
         self.off_duration = None
 
         room_temp = self.cycle_start_room_temp
-        flow_temp = self.lwt
+        mean_water_temp = self.lwt - self.ht_dT / 2
         heating_on = True
 
         step = 0
@@ -188,11 +188,11 @@ class CyclingSolver:
         while step < self.max_steps:
             self.times_mins.append(step * self.time_step_secs / 60)
             step += 1
-            cop = self.cop_model.cop(flow_temp)
-            self.cycle_flow_temp.append(flow_temp)
+            self.mean_water_temp.append(mean_water_temp)
             self.cycle_room_temp.append(room_temp)
             # HP input
             if heating_on:
+                cop = self.cop_model.cop(mean_water_temp + self.ht_dT / 2)
                 energy_to_fluid = self.time_step_secs * self.hp_capacity  # Joules
                 self.cycle_cop.append(cop)
                 self.cycle_elec_used.append(energy_to_fluid / 3600 / cop)
@@ -201,12 +201,12 @@ class CyclingSolver:
                 self.cycle_cop.append(None)
                 self.cycle_elec_used.append(0)  # to Watt.hours
             # Emitter to room. Use of flow temp from start should be OK if time steps small enough
-            emitter_output = self.emitter.output(room_temp, flow_temp - self.ht_dT / 2)
+            emitter_output = self.emitter.output(room_temp, mean_water_temp)
             energy_from_fluid = self.time_step_secs * emitter_output
             self.cycle_emitter_output.append(emitter_output)
 
             # update flow temp
-            flow_temp += (energy_to_fluid - energy_from_fluid) / (4.2 * self.fluid_volume * 1000)
+            mean_water_temp += (energy_to_fluid - energy_from_fluid) / (4.2 * self.fluid_volume * 1000)
 
             # update room temperature. NB these are in Watt.hours
             room_lost = self.heat_loss_factor * (room_temp - self.ambient_temp) * self.time_step_secs / 3600
@@ -215,11 +215,11 @@ class CyclingSolver:
             room_temp += room_temp_change
 
             # check if the max LWT was reached => turn compressor off
-            if flow_temp > self.lwt + self.lwt_overshoot:
+            if mean_water_temp + self.ht_dT / 2 > self.lwt + self.lwt_overshoot:
                 heating_on = False
                 self.on_duration = step * self.time_step_secs / 60
             # if the heating is off and we've got below the desired, the cycle has ended
-            elif (flow_temp < self.lwt) and not heating_on:
+            elif (mean_water_temp + self.ht_dT / 2 < self.lwt) and not heating_on:
                 print(f"Cycle ended after {step} steps")
                 self.off_duration = step * self.time_step_secs / 60 - self.on_duration
                 break

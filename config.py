@@ -289,10 +289,11 @@ def get_cop_point_options(vs="ambient"):
                 "COP": (3.15, 2.85, 2.55, 2.30, 2.00, 1.70),
                 "capacity": 3700  # Watts
             },
+            # !!!! EDLA are probably NOT good to use because there are no tabulated COPs for the compressor running a min frequency, unlike Ecodan.
             # EDLA - 04-08 min input 300W? 09-16 min input 900W.
             # HOWEVER: looking at the Ecodan, its capacity at min freq is fairly constant over ambient temps, even though COP changes, so I suspect that
             # the HP varies its minimum compressor frequency, keeping it higher for lower ambient temps
-            # Values taken from earlier "_LTW_" entries, using the splines to fill in
+            # Values taken from earlier "_LTW* Cert" entries, using the splines to fill in.
             "EDLA09_AMB+10": {
                 "T_amb": 10,
                 "dT": 5,
