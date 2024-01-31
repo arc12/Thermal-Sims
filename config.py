@@ -21,18 +21,18 @@ class Config(object):
 def get_building_default_options():
     # initial parameters for building.
     d = {
-        "Kitchen": {  # Current kitchen emitters for power output but h2o volume closer to intended. Actual room cooling rates are lower than sim with 88W/K and Mid-Medium
-            "heat_loss_factor": 88,  # W/K; 100 from MCS spreadsheet with 2 air changes, 88 with 1.5 changes (yr 2000+ build).
-            "emitter_std_power": 4500,  # W @ dT(rad-room)=50C; current rads = 2.9kW + kickspace at low speed = 1.7kW. Reduce slightly for cooler water in KS
-            "tmp_category": "Mid Medium",  # thermal mass parameter lookup name.
-            "floor_area": 28,  # kitchen = 26 + utility = 10
-            # volume of circulating water (pipes + rads) in litres. Excl volumiser (option in UI)
-            "fluid_volume": 22  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
-        },
         "Kitchen FC": {  # with new fan coil rather than kickspace
             "heat_loss_factor": 88,  # W/K; 100 from MCS spreadsheet with 2 air changes, 88 with 1.5 changes (yr 2000+ build).
             "emitter_std_power": 5900,  # W @ dT(rad-room)=50C; current rads = 2.9kW + fan coil on high = 3kW
             "tmp_category": "Mid Medium",  # thermal mass parameter lookup name
+            "floor_area": 28,  # kitchen = 26 + utility = 10
+            # volume of circulating water (pipes + rads) in litres. Excl volumiser (option in UI)
+            "fluid_volume": 22  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
+        },
+        "Kitchen": {  # Current kitchen emitters for power output but h2o volume closer to intended. Actual room cooling rates are lower than sim with 88W/K and Mid-Medium
+            "heat_loss_factor": 88,  # W/K; 100 from MCS spreadsheet with 2 air changes, 88 with 1.5 changes (yr 2000+ build).
+            "emitter_std_power": 4500,  # W @ dT(rad-room)=50C; current rads = 2.9kW + kickspace at low speed = 1.7kW. Reduce slightly for cooler water in KS
+            "tmp_category": "Mid Medium",  # thermal mass parameter lookup name.
             "floor_area": 28,  # kitchen = 26 + utility = 10
             # volume of circulating water (pipes + rads) in litres. Excl volumiser (option in UI)
             "fluid_volume": 22  # 7.5l for 20m x 22mm pipe; 6.5l for 600x1000 K2; 4l for 300x1200 K2
@@ -131,16 +131,17 @@ def get_cop_point_options(vs="ambient"):
                 "capacity": 10000  # Watts
             },
 
+            # Certification programme COPs. These are higher than Daikin capacity table COPs at full load
             # !!!! The Daikin data is rather sparse!!!!!!
             # Used EHPA (+BAFA for 10C) certification programme COPs from capacity tables in the Daikin Databook + SOME GUESSWORK (see below)
-            "EDLA09_LWT35": {  # Sufficient data for this one. Curve roughly follows WM85 but is slightly higher
+            "EDLA09_LWT35 Cert": {  # Sufficient data for this one. Curve roughly follows WM85 but is slightly higher
                 "LWT": 35,
                 "dT": 5,
                 "T_amb": (-7, 2, 7, 10),
                 "COP": (2.81, 3.79, 4.91, 5.32),
                 "capacity": 6290  # Watts. Use minimum over all T_amb
             },
-            "EDLA09_LWT40": {  # MADE UP to be between 35 and 45 (which is what WM85 data shows)
+            "EDLA09_LWT40 Cert": {  # MADE UP to be between 35 and 45 (which is what WM85 data shows)
                 "LWT": 40,
                 "dT": 5,
                 "T_amb": (-7, -2, 2, 7, 10),
@@ -148,7 +149,7 @@ def get_cop_point_options(vs="ambient"):
                 "capacity": 6290  # Watts. Use minimum over all T_amb
             },
             # Used combination of MCS and EHPA certification programme COPs from capacity tables in the Daikin Databook.
-            "EDLA09_LWT45": {  # very close to WM85 but the Daikin data ends at +7C, whereas the LWT=35 case and WM85 show we should not linear-extrapolate
+            "EDLA09_LWT45 Cert": {  # very close to WM85 but the Daikin data ends at +7C, whereas the LWT=35 case and WM85 show we should not linear-extrapolate
                 "LWT": 45,
                 "dT": 5,
                 "T_amb": (-7, -2, 7, 12),  # added 12C by analogy to WM85
@@ -156,7 +157,7 @@ def get_cop_point_options(vs="ambient"):
                 "capacity": 7760  # Watts. Use minimum over all T_amb
             },
             # only 2 points in data is dangerous straight line!
-            "EDLA09_LWT55": {
+            "EDLA09_LWT55 Cert": {
                 "LWT": 55,
                 "dT": 8,
                 "T_amb": (-7, 2, 7, 12),  # added points at 0C and 12C to match shape of LWT=45 and WM85
@@ -164,39 +165,71 @@ def get_cop_point_options(vs="ambient"):
                 "capacity": 7130  # Watts. Use minimum over all T_amb
             },
 
-            "EDLA08_LWT35": {  # Sufficient data for this one. Curve roughly follows WM85 but is slightly higher
+            # COPs computed from Daikin capacity tables. For EDLA09 there are no tabulated values for "optimised for sound", so these are estimated based on ratio for EDLA08
+            # Capacity in Watts. Used minimum over all T_amb
+            # As a rule, COPs are not at their maxiumum at full compressor load but "optimised for sound" may mean "100%" is not actually max compressor)
+            "EDLA09_LWT35": {
                 "LWT": 35,
                 "dT": 5,
-                "T_amb": (-7, 2, 7, 10),
-                "COP": (2.7, 3.65, 4.6, 4.72),
-                "capacity": 5600  # Watts. Use minimum over all T_amb
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.48, 2.73, 3, 4.82, 4.26),
+                "capacity": 7200
             },
-            "EDLA08_LWT40": {  # MADE UP to be between 35 and 45 (which is what WM85 data shows)
+            "EDLA09_LWT40": {
                 "LWT": 40,
                 "dT": 5,
-                "T_amb": (-7, -2, 2, 7, 10),
-                "COP": (2.4, 2.7, 3.17, 4.2, 4.45),
-                "capacity": 5800  # Watts. Use minimum over all T_amb
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.32, 2.54, 2.71, 3.99, 3.83),
+                "capacity": 7700
             },
-            # Used combination of MCS and EHPA certification programme COPs from capacity tables in the Daikin Databook.
-            "EDLA08_LWT45": {  # very close to WM85 but the Daikin data ends at +7C, whereas the LWT=35 case and WM85 show we should not linear-extrapolate
+            "EDLA09_LWT45": {
                 "LWT": 45,
                 "dT": 5,
-                "T_amb": (-7, 2, 7, 12),  # added 12C by analogy to WM85
-                "COP": (2.21, 2.75, 3.50, 3.95),
-                "capacity": 6000  # Watts. Use minimum over all T_amb
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.21, 2.38, 2.49, 3.43, 3.44),
+                "capacity": 7900
             },
-            # only 2 points is dangerous straight line!
+            "EDLA09_LWT55": {
+                "LWT": 55,
+                "dT": 5,
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (1.79, 1.92, 2.09, 3.32, 2.76),
+                "capacity": 7900
+            },
+
+            # COP computed from Daikin capacity table (100% load, optimised for sound). Capacity in Watts. Used minimum over all T_amb
+            # COPs are not at their maxiumum at full compressor load but "optimised for sound" may mean "100%" is not actually max compressor)
+            "EDLA08_LWT35": {
+                "LWT": 35,
+                "dT": 5,
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.7, 3, 3.31, 4.53, 5.38),
+                "capacity": 6300
+            },
+            "EDLA08_LWT40": {
+                "LWT": 40,
+                "dT": 5,
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.39, 2.68, 2.97, 3.94, 4.64),
+                "capacity": 6500
+            },
+            "EDLA08_LWT45": {
+                "LWT": 45,
+                "dT": 5,
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (2.17, 2.42, 2.7, 3.48, 4.02),
+                "capacity": 6000
+            },
             "EDLA08_LWT55": {
                 "LWT": 55,
                 "dT": 8,
-                "T_amb": (-7, 2, 7, 12),  # added points at 0C and 12C to match shape of LWT=45 and WM85
-                "COP": (1.7, 2.1, 2.70, 2.85),
-                "capacity": 7130  # Watts. Use minimum over all T_amb
+                "T_amb": (-7, -2, 2, 7, 12),
+                "COP": (1.62, 1.82, 2.05, 2.87, 3.05),
+                "capacity": 5200
             }
         }
     else:
-        # vs LWT. Capacities chosen for LWT=40.
+        # vs LWT. Intended for cycling simulation. Capacities chosen for LWT=40 and are MINIMUM capacities
         cops = {
             # WM85 is approx 8kW capacity
             "WM85_AMB+12": {
@@ -343,16 +376,6 @@ def get_ambient_hr_options():
     :return:
     """
     amb = {
-        "Mild Winter": [
-            5.5,  # 00
-            5,  # 03
-            5,  # 06
-            7,  # 09
-            10,  # 12
-            10,  # 15
-            7,  # 18
-            6  # 21
-        ],
         "Winter": [
             4.2,  # 00
             3.8,  # 03
@@ -362,6 +385,16 @@ def get_ambient_hr_options():
             6.0,  # 15
             5.5,  # 18
             4.8  # 21
+        ],
+        "Mild Winter": [
+            5.5,  # 00
+            5,  # 03
+            5,  # 06
+            7,  # 09
+            10,  # 12
+            10,  # 15
+            7,  # 18
+            6  # 21
         ],
         "Coldish Winter": [
             1.0,  # 00
