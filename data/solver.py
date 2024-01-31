@@ -230,3 +230,87 @@ class CyclingSolver:
         # these will be bad if exit was due to max steps being reached
         self.iter_room_temp_delta = fabs(self.cycle_start_room_temp - room_temp)
         self.cycle_start_room_temp = room_temp
+
+
+# spin off from RoomTempSolver to avoid spaghetti code.
+class RoomTempSolver2:
+    def __init__(self, building_parameters, amb_option, lwt, dT=5, initial_temp=16, steps_per_hour=6):
+        """
+        Simplified version of RoomTempSolver for a constant LWT. ie. no need for COP, target temps and heating on/off.
+
+        :param building_parameters: dict with same keys as returned by get_building_defaults() except that there should be a "tmp" key with a value for thermal mass parameter
+        :param amb_option: key into return from get_ambient_hr_options()
+        :param initial_temp: starting temp
+        :param steps_per_hour: number of steps per hour in the solver and for the iter_* variables.
+        """
+        amb_defn = get_ambient_hr_options()[amb_option]
+
+        # building setup
+        self.heat_loss_factor = building_parameters["heat_loss_factor"]
+        self.emitter = Radiator(building_parameters["emitter_std_power"], lwt - dT / 2)
+        self.heat_capacity = building_parameters["tmp"] * building_parameters["floor_area"] / 3.6  # Watt.hours per Kelvin
+
+        # other setup
+        self.steps_per_hour = steps_per_hour
+        self.time_step_duration = 1 / steps_per_hour
+
+        # current state
+        self.current_temp = initial_temp
+
+        # time series after last iteration. lists of length 24 * steps_per_hour
+        iter_steps = 24 * steps_per_hour
+        self.iter_room_temp = [initial_temp] * iter_steps  # used to record temps at each iteration to check for convergence
+
+        # Convenient to get a list of ambient temperatures etc to match the iter_* data. Used internally and useful for plotting
+        amb_model = AmbientTemps(amb_defn)
+        self.times = list(np.arange(0, 24, 1 / steps_per_hour))
+        self.ambient_temps = [amb_model.temp(hr) for hr in self.times]
+
+        # energy balance
+        self.energy_lost = list()
+        self.energy_emitted = list()
+
+        # use as a "result" and to assess convergence
+        self.full_day_loss = 0  # kWh
+        self.full_day_loss_delta = 99  # absolute change
+
+        # use to assess convergence. These are ABSOLUTE changes, i.e. |delta|
+        # Beware that max_t_iter_delta (in particular) can show instability. I suspect this is down to switch on/off events landing in different time slices.
+        # This can be mitigated by increasing the number of steps per hour.
+        self.max_t_iter_delta = 99
+        self.mean_t_iter_delta = 99
+        # and an iteration counter for non-convergence exit
+        self.n_iterations = 0
+
+    def iterate(self):
+        max_t_iter_delta = 0
+        sum_t_iter_delta = 0
+        self.n_iterations += 1
+
+        self.energy_lost = list()
+        self.energy_emitted = list()
+
+        for ix, hr in enumerate(self.times):
+            amb = self.ambient_temps[ix]
+            t = self.current_temp
+
+            # heat loss and supplied by emitter
+            lost = self.heat_loss_factor * (self.current_temp - amb) * self.time_step_duration
+            emitted = self.emitter.output(t) * self.time_step_duration  # Watt.hours
+            self.energy_lost.append(lost)
+            self.energy_emitted.append(emitted)
+
+            room_temp_change = (emitted - lost) / self.heat_capacity
+            self.current_temp += room_temp_change
+            room_temp_iter_delta = fabs(self.iter_room_temp[ix] - self.current_temp)
+            max_t_iter_delta = max(max_t_iter_delta, room_temp_iter_delta)
+            sum_t_iter_delta += room_temp_iter_delta
+
+            self.iter_room_temp[ix] = self.current_temp
+
+        self.max_t_iter_delta = max_t_iter_delta
+        self.mean_t_iter_delta = sum_t_iter_delta / len(self.times)
+
+        loss_kwh = sum(self.energy_lost) / 1000
+        self.full_day_loss_delta = fabs(self.full_day_loss - loss_kwh)
+        self.full_day_loss = loss_kwh

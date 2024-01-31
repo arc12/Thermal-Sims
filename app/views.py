@@ -6,7 +6,8 @@ top_menus = [
     {"path": "/ambient", "title": "Ambient"},
     {"path": "/cop_curves", "title": "COP Curves"},
     {"path": "/room_temp", "title": "Room Temp"},
-    {"path": "/cycling", "title": "Cycling"}
+    {"path": "/cycling", "title": "Cycling"},
+    {"path": "/constant", "title": "Constant LWT"}
 ]
 
 
